@@ -9,6 +9,8 @@ import argparse
 import requests
 import time
 import random
+import threading
+from math import ceil
 
 TGET_VER = "00" + "." + "00" + "." + "01"
 
@@ -38,6 +40,16 @@ def draw_help() -> None:
 
     print(f"Threads:")
     print(f"  -t, set number of download threads")
+
+def download(url: str, start: int, end: int) -> requests.request: #worker that takes url and start and end byte and downloads the content hten returns its data
+    headers = {"Range": f"bytes={start}-{end}"}
+    response = requests.get(url, headers=headers)
+    
+    if(response.status_code not in [200,206]):
+        print(f"status code: {response.status_code}")
+        return response
+
+    return response
 
 def main() -> None:
     #draw_error("missing URL")
@@ -69,65 +81,56 @@ def main() -> None:
     
     if (args.stats):
         start_time = time.perf_counter()
-    #try to download file now
-    #test file is motorcycle.jpg on my site
-    args.URL = 'https://ec2-54-88-121-100.compute-1.amazonaws.com/assets/images/motorcycle.jpg'
+    
+    #md5sum of this: b3215c06647bc550406a9c8ccc378756
     args.URL = 'http://ipv4.download.thinkbroadband.com/5MB.zip'
-    #response = requests.get(args.URL, verify=False)
-    response = requests.get(args.URL)
- 
-    print('Status Code:', response.status_code)
 
-    # Print headers
-    print('Headers:', response.headers)
+    chunksize = 512 * 1000
 
-    # Print the first 100 bytes of the content (useful for binary data like images)
-    print('Content (first 100 bytes):', response.content[:100])
+    header = requests.head(args.URL)
+    if(header.headers['content-length']):
+        print(f"Length (Byte): {header.headers['content-length']}")
+    count = int(header.headers['content-length']) / chunksize
+    print(ceil(count))
 
-    # Check the content type
-    print('Content Type:', response.headers.get('Content-Type'))
+    index_for_download = []
+    start = 0
+    for i in range(ceil(count)):
+        if(i == 0):
+            index_for_download.append([start,start+chunksize])
+        else:
+            index_for_download.append([start+1,start+chunksize])
+        start += chunksize
+    index_for_download[-1][1] = int(header.headers['content-length'])
+    print(index_for_download)
 
-    # Print the response URL (after any redirects)
-    print('Response URL:', response.url)
+    bits = b''
 
-    # Check if the response was successful (status code 200)
-    if response.status_code == 200:
-        print('Request was successful!')
-        filename = str(random.randint(0,9)) + str(random.randint(0,9)) + str(random.randint(0,9)) + ".dwnl"
-        path = "./" + filename
+    for i in index_for_download:
+        response = download(args.URL, i[0], i[1])
+        bits += response.content
+    
+    with open("./testing/parts.dwnl", "wb") as f:
+        f.write(bits)
+    
+    print("End")
+    return None
 
-        
-        print(path)
 
 
-        with open(path, 'wb') as file:
-            file.write(response.content)
-            print(f'Image has been downloaded and saved as {filename}')
-    else:
-        print('Request failed with status code:', response.status_code)
-        #print(response.text)
+#    if(response.headers['content-length'] and args.threads != 1):
+#        chunksize = float(response.headers['content-length']) / args.threads
+#    else:
+#        chunksize = 512 * 1000 #512kb
+#    headers = {"Range": f"bytes=0-{chunksize}"}
+#    response = requests.get(args.URL, headers=headers)
 
     
     if (args.stats and start_time):
         elapsed_time = time.perf_counter() - start_time
-        #elapsed_time = time.strftime("%H:%M:%S:%f", time.gmtime(elapsed_time))
         print(f"\tTime: {elapsed_time:.2f}s")
-    
-
-    #start arg proc logic???
 
     return None
 
 if __name__ == "__main__":
     main()
-
-
-#views:
-#   invalid cmd
-"""
-        wget: missing URL
-        Usage: wget [OPTION]... [URL]...
-
-        Try `wget --help' for more options.
-    """
-#   working
