@@ -10,38 +10,25 @@ import requests
 import time
 import random
 import threading
+import concurrent.futures
 from math import ceil
 
-TGET_VER = "00" + "." + "00" + "." + "01"
+TGET_VER = "00" + "." + "00" + "." + "02"
 
-def draw_error(error: str) -> None:
-    print(f"tget: {error}")
-    print(f"Usage: tget [OPTION]... [URL]...")
-    print(f"")
-    print(f"Try tget --help for more options.")
-
-"""
-        GNU Wget 1.20.3, a non-interactive network retriever.
-        Usage: wget [OPTION]... [URL]...
-
-        Mandatory arguments to long options are mandatory for short options too.
-
-        Startup:
-          -V,  --version                   display the version of Wget and exit
-"""
-
-def draw_help() -> None:
-    print(f"Tget {TGET_VER}, a cli web download tool")
-    print(f"Usage: tget [OPTION]... [URL]...")
-    print(f"")
-    print(f"General:")
-    print(f"  -v, print Tget version and exit")
-    print(f"  -h, display this help screen")
-
-    print(f"Threads:")
-    print(f"  -t, set number of download threads")
+def generate_download_byte_indexes(chunksize: int, totalsize: int, count: int) -> list:
+    index_for_download = []
+    start = 0
+    for i in range(count):
+        if(i == 0):
+            index_for_download.append([start,start+chunksize])
+        else:
+            index_for_download.append([start+1,start+chunksize])
+        start += chunksize
+    index_for_download[-1][1] = totalsize
+    return index_for_download
 
 def download(url: str, start: int, end: int) -> requests.request: #worker that takes url and start and end byte and downloads the content hten returns its data
+    print(f"In download {start}")
     headers = {"Range": f"bytes={start}-{end}"}
     response = requests.get(url, headers=headers)
     
@@ -49,6 +36,7 @@ def download(url: str, start: int, end: int) -> requests.request: #worker that t
         print(f"status code: {response.status_code}")
         return response
 
+    print(f"status code: {response.status_code}")
     return response
 
 def main() -> None:
@@ -80,57 +68,64 @@ def main() -> None:
         return None
     
     if (args.stats):
-        start_time = time.perf_counter()
+        start_time1 = time.perf_counter()
     
     #md5sum of this: b3215c06647bc550406a9c8ccc378756
     args.URL = 'http://ipv4.download.thinkbroadband.com/5MB.zip'
 
-    chunksize = 512 * 1000
+    chunksize = 512 * 1000 * 2
 
     header = requests.head(args.URL)
     if(header.headers['content-length']):
         print(f"Length (Byte): {header.headers['content-length']}")
-    count = int(header.headers['content-length']) / chunksize
-    print(ceil(count))
+    count = ceil(int(header.headers['content-length']) / chunksize)
 
-    index_for_download = []
-    start = 0
-    for i in range(ceil(count)):
-        if(i == 0):
-            index_for_download.append([start,start+chunksize])
-        else:
-            index_for_download.append([start+1,start+chunksize])
-        start += chunksize
-    index_for_download[-1][1] = int(header.headers['content-length'])
-    print(index_for_download)
+    index_for_download = generate_download_byte_indexes(chunksize, header.headers['content-length'], count)
 
     bits = b''
 
+    map_list = []
+    for i in range(len(index_for_download)):
+        map_list.append([args.URL, index_for_download[i][0], index_for_download[i][1]])
+
+    for i in map_list:
+        print(i)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        executor.map(download, [args.URL for i in range(count)], [index_for_download[i][0] for i in range(count)], [index_for_download[i][1] for i in range(count)])
+
+    print("end")
+
+    return None
+
+    download_time = 0
+    filewrite_time = 0
+
     for i in index_for_download:
+        start_time = time.perf_counter()
         response = download(args.URL, i[0], i[1])
+        elapsed_time = time.perf_counter() - start_time
+        download_time += elapsed_time
+        #print(f"\tTime: {elapsed_time:.2f}s")
+        start_time = time.perf_counter()
         bits += response.content
+        elapsed_time = time.perf_counter() - start_time
+        filewrite_time += elapsed_time
     
     with open("./testing/parts.dwnl", "wb") as f:
+        start_time = time.perf_counter()
         f.write(bits)
-    
-    print("End")
-    return None
-
-
-
-#    if(response.headers['content-length'] and args.threads != 1):
-#        chunksize = float(response.headers['content-length']) / args.threads
-#    else:
-#        chunksize = 512 * 1000 #512kb
-#    headers = {"Range": f"bytes=0-{chunksize}"}
-#    response = requests.get(args.URL, headers=headers)
-
-    
-    if (args.stats and start_time):
         elapsed_time = time.perf_counter() - start_time
-        print(f"\tTime: {elapsed_time:.2f}s")
+        filewrite_time += elapsed_time
+        print("File wrote")
 
-    return None
+    if (args.stats and start_time):
+        elapsed_time = time.perf_counter() - start_time1
+        print(f"\t       Time: {elapsed_time:.2f}s")
+        print(f"\tDownloading: {download_time:.2f}s ({(download_time/count):.2f}s/chunk)")
+        print(f"\t    Writing: {filewrite_time:.2f}s")
+
+    return None    
 
 if __name__ == "__main__":
     main()
