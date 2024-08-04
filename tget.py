@@ -20,23 +20,23 @@ def generate_download_byte_indexes(chunksize: int, totalsize: int, count: int) -
     start = 0
     for i in range(count):
         if(i == 0):
-            index_for_download.append((start,start+chunksize))
+            index_for_download.append((start,start+chunksize, i))
         else:
-            index_for_download.append((start+1,start+chunksize))
+            index_for_download.append((start+1,start+chunksize, i))
         start += chunksize
-    index_for_download[-1] = (index_for_download[-1][0], int(totalsize))
+    index_for_download[-1] = (index_for_download[-1][0], int(totalsize), count - 1)
     return index_for_download
 
-def download(url: str, start: int, end: int) -> requests.request: #worker that takes url and start and end byte and downloads the content hten returns its data
+def download(url: str, start: int, end: int, id: int) -> requests.request: #worker that takes url and start and end byte and downloads the content hten returns its data
     print(f"In download {start}")
     headers = {"Range": f"bytes={start}-{end}"}
     response = requests.get(url, headers=headers)
     
     if(response.status_code not in [200,206]):
-        print(f"status code: {response.status_code}")
+        print(f"{id} status code: {response.status_code}")
         return response
 
-    print(f"status code: {response.status_code}")
+    print(f"{id} status code: {response.status_code}")
     return response
 
 def main() -> None:
@@ -77,8 +77,8 @@ def main() -> None:
     if(header.headers['content-length']):
         print(f"Length (Byte): {header.headers['content-length']}")
     
-    chunksize = int(header.headers['content-length'])
-    chunksize = int(header.headers['content-length'])/1
+    chunksize = 512 * 1000
+    #chunksize = int(header.headers['content-length'])/5
     
     count = ceil(int(header.headers['content-length']) / chunksize)
 
@@ -92,14 +92,22 @@ def main() -> None:
             map_list.append([args.URL, index_for_download[i][0], index_for_download[i][1]])
 
     for i in index_for_download:
-        print(i)
+        print(f"{i[1]-i[0]} - {i}")
 
     data = [b''] * count
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future_to_download = {executor.submit(download, args.URL, start, end): (start, end) for start,end in index_for_download}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(count, 24)) as executor:
+        future_to_download = {
+            executor.submit(download, args.URL, start, end, id): (start, end, id) for start, end, id in index_for_download
+            }
+        
         for future in concurrent.futures.as_completed(future_to_download):
-            url = future_to_download[future]
+
+            _, _, id = future_to_download[future]
+            #print(start)
+            print(id)
+
+            data[id] = (future.result().content)
             #print(url)
 
     if(False):
