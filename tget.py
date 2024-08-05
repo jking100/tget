@@ -39,11 +39,7 @@ def download(url: str, start: int, end: int, id: int) -> requests.request: #work
     print(f"{id} status code: {response.status_code}")
     return response
 
-def main() -> None:
-    #draw_error("missing URL")
-    #draw_help()
-
-    #USAGE: tget [URL]... [OPTION]...
+def get_args():
     parser = argparse.ArgumentParser(
                                 prog='tget',
                                 description='Downloads file from URL, utilizing threaded downloading',
@@ -55,17 +51,19 @@ def main() -> None:
     parser.add_argument('-s', '--stats', action='store_true', help="Toggle download statistic output")
     parser.add_argument('-p', '--python', action='store_true', help="Toggle python info output")
     parser.add_argument('--version', action='version', version=f"Tget version: {TGET_VER}")
-    args = parser.parse_args()        
+    
+    return parser.parse_args()
 
-    print("-" * 80)
-    if(args.python):
-        print(f"Python env.: {sys.executable} ({sys.version.split()[0]})")
-    print(str(args))
-    print("-" * 80)
+def main() -> int:
+    args = get_args()        
 
-    if(not args.URL): # Double checking for valid url at minimum
-        print(f"URL Error")
-        return None
+    if(args.stats or args.python):
+        print("-" * 80)
+        if(args.python):
+            print(f"Python env.: {sys.executable} ({sys.version.split()[0]})")
+        if(args.stats):
+            print(str(args))
+        print("-" * 80)
     
     if (args.stats):
         start_time1 = time.perf_counter()
@@ -74,6 +72,11 @@ def main() -> None:
     args.URL = 'http://ipv4.download.thinkbroadband.com/5MB.zip'
 
     header = requests.head(args.URL)
+    if (header.status_code != (200|206)):
+        print(f"Error: {header.status_code}\n \
+              URL: {args.URL}")
+        return -1
+        
     if(header.headers['content-length']):
         print(f"Length (Byte): {header.headers['content-length']}")
     
@@ -133,7 +136,7 @@ def main() -> None:
         #print(f"\tDownloading: {download_time:.2f}s ({(download_time/count):.2f}s/chunk)")
         #print(f"\t    Writing: {filewrite_time:.2f}s")
 
-    return None   
+    return 1   
 
     download_time = 0
     filewrite_time = 0
