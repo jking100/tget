@@ -3,7 +3,6 @@
 Creates simultaneous connections to the resource host to accelerate download speeds 
 
 Targeted for use on large files, some sample results below comparing time to download a 1GB .iso 
-
 <pre>
 firefox - 214s ( 4.7MB/s)
    wget - 178s ( 5.7MB/s)
@@ -11,10 +10,12 @@ firefox - 214s ( 4.7MB/s)
 </pre>
 
 ### Installation
-Tested on linux with Python 3.11
+Tested on linux with Python 3.11 \
+Windows/Mac functionality untested
+
+Insert this into ~/.bashrc and reload the session
 ```
-cd ~
-vi .bashrc
+alias tget='python /path/to/your/tget.py'
 ```
-Insert the below line with /path/to/tget.py replaced with your local location
-> alias tget='python /path/to/tget.py'
+
+tget can now be called like any other command line tool
