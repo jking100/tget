@@ -40,6 +40,7 @@ def generate_thread_byte_indexes(threads: int, totalsize: int) -> list:
             thread_byte_index.append((i, start+1, start+byte_portion))
         start += byte_portion
     thread_byte_index[-1] = (count-1, thread_byte_index[-1][1], totalsize)
+    #for i in thread_byte_index: print(i)
     return thread_byte_index
 
 def get_args():
@@ -115,6 +116,7 @@ def main() -> int:
         args.output = name
     ##################################################################
     #check if output location is valid
+    args.output = Path().resolve() / args.output
     try:
         with open(args.output, 'wb') as file:
             pass
@@ -143,10 +145,6 @@ def main() -> int:
     print(f"Saving to: '{args.output}'")
 
     ############################################################################
-    #https://files.testfile.org/PDF/200MB-TESTFILE.ORG.pdf
-    if (True):
-        args.output = f"./tgettest/{args.output}"
-    ############################################################################
 
     try:
         with open(args.output, "wb") as file:
@@ -173,6 +171,7 @@ def main() -> int:
                         stop_work.set()
                         print(f"\nDownload Failed - `{args.output}` Connection error [{task.result()}]")
                         with thread_lock:
+                            print("Deleting")
                             Path.unlink(args.output, missing_ok=True)
                         is_download_ok = False
                         break
@@ -185,7 +184,7 @@ def main() -> int:
 
             return 1 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"File Error: {e}")
         return -1
 
 
