@@ -25,8 +25,10 @@ import concurrent.futures
 from math import ceil
 from re import match
 from pathlib import Path
+import hashlib
 
-TGET_VER = "01" + "." + "00"
+
+TGET_VER = "01" + "." + "01"
 
 def generate_thread_byte_indexes(threads: int, totalsize: int) -> list:
     byte_portion = ceil(totalsize / float(threads))
@@ -51,7 +53,7 @@ def get_args():
     parser.add_argument("URL", type=str, help="URL of resource to get")
     parser.add_argument('-t', dest='threads', default=4, type=int, help="Set number of download threads (1-10) [default: 4]")
     parser.add_argument('-o', dest='output', default=None, metavar='OUTPUT FILE', type=str, help="Set location of download")
-    #parser.add_argument('--md5', dest='md5', default=None, type=str, help="Check download against source md5 checksum")
+    parser.add_argument('--checksum', dest='sha', default=None, type=str, help="Check download against source sha256 checksum")
     parser.add_argument('--version', action='version', version=f"Tget v{TGET_VER} - A parallel download acceleration utility (Joseph King, 2024)")
     
     return parser.parse_args()
@@ -92,6 +94,13 @@ class thread_worker: #an object that knows only how to open http connection and 
 def execute_thread_workers(url, start, end, thread_id, thread_lock, file, stop_work):
     worker = thread_worker(url, start, end, thread_id, thread_lock, file, stop_work)
     return worker.execute()
+
+def check_sha256(file, checksum: str) -> bool:
+    #2dce83fbc71ddffac53b37c484088fa2334f39641fa0d9ca6516fd0f656dac2a
+    digest = hashlib.file_digest(file, "sha256")
+    file_checksum = digest.hexdigest()
+
+    return True if (file_checksum == checksum) else False
 
 def main() -> int:
     args = get_args()        
@@ -182,10 +191,24 @@ def main() -> int:
             elapsed_time_main = perf_counter() - start_time_main
             print(f"\nDownload Complete - `{args.output}` in {elapsed_time_main:.1f}s @ {int(header.headers['content-length'])/float(1024*1024*elapsed_time_main):.1f}MB/s")
 
-            return 1 
     except Exception as e:
         print(f"File Error: {e}")
         return -1
+    
+    if(args.sha):
+        try:
+            with open(args.output, "rb") as file:
+                if(not check_sha256(file, args.sha)):
+                    print(f"Checksum verification - fail")
+                else:
+                    print(f"Checksum verification - pass")
+
+        except Exception as e:
+            print("Checksum verify:")
+            print(f"File Error: {e}")
+            return -1
+    
+    return 0
 
 
 if __name__ == "__main__":
