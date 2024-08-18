@@ -17,6 +17,13 @@
 #           
 # Joseph King, Aug 2024
 
+# current issues:
+# fails to write gzip? content to the disk. seems to download it just fine
+
+#todo
+#make/rewrite existing worker manager function so it handles more of the logic automatically
+#re work error handling
+
 import argparse
 import requests
 from time import perf_counter
@@ -52,8 +59,8 @@ def get_args():
                                 description='A parallel download acceleration utility',
                                 )
     parser.add_argument("URL", type=str, help="URL of resource to get")
-    parser.add_argument('-t', dest='threads', default=4, type=int, help="Set number of download threads (1-10) [default: 4]")
-    parser.add_argument('-o', dest='output', default=None, metavar='OUTPUT FILE', type=str, help="Set location of download")
+    parser.add_argument('-t', dest='threads', metavar='{1-10}', default=4, type=int, help="Set number of download threads (default: 4)")
+    parser.add_argument('-o', dest='output', default=None, metavar='FILE', type=str, help="write download to FILE")
     parser.add_argument('--checksum', dest='sha', metavar='', default=None, type=str, help="Check download against given sha256 checksum")
     parser.add_argument('--version', action='version', version=f"Tget v{TGET_VER} - A parallel download acceleration utility (Joseph King, 2024)")
     
@@ -123,30 +130,33 @@ def main() -> int:
         print("Error: Threads must be a value between (1-10)")
         return -1
     ##################################################################
+    #if -O : use has passed a valid file (abs, or relative path) with their own name. write it
+    #if !-O: default to regex of file name and download to working directory
     url_parts = args.URL.split("/")
     name = url_parts[-1]
     regex = r"^([\w\.-]+)"
     x = match(regex,name)
     if(not x):
         print("Warn: Failed to parse filename, defaulting to tget-{0-9}.dwnl")
-        args.output = f'./tget-{randint(0,9)}.dwnl'
-    if args.output == None:
-        args.output = name
+        name = f'./tget-{randint(0,9)}.dwnl'
     ##################################################################
     #check if output location is valid
-    args.output = Path().resolve() / args.output
+    pwd = Path().resolve()
+    download_file_path = Path(pwd+name) if (args.output == None) else Path(args.output)
+
+    #print("-"*80 + f"\nDEBUG: {download_file_path}\n" + "-"*80)
     try:
         with open(args.output, 'wb') as file:
             pass
     except IOError as e:
-        print("Error: Output file location.")
+        print(f"Error: Failed to initialize file path `{args.output}`")
         print(f"\t{e}")
         return -1
     
     ##################################################################
     
-    print("Connecting to", args.URL)
     ##################################################################
+    print("Checking connection to", args.URL)
     header = requests.head(args.URL)
     if (header.status_code not in (200, 206)):
         print(f"Error: {header.status_code}")
