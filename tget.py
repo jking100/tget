@@ -1,4 +1,5 @@
-#
+#!/usr/bin/env python3
+
 # Tget: a wget inspired clone
 #
 # todo: implement checksum verification option, code could use a few comments
@@ -53,7 +54,7 @@ def get_args():
     parser.add_argument("URL", type=str, help="URL of resource to get")
     parser.add_argument('-t', dest='threads', default=4, type=int, help="Set number of download threads (1-10) [default: 4]")
     parser.add_argument('-o', dest='output', default=None, metavar='OUTPUT FILE', type=str, help="Set location of download")
-    parser.add_argument('--checksum', dest='sha', default=None, type=str, help="Check download against source sha256 checksum")
+    parser.add_argument('--checksum', dest='sha', metavar='', default=None, type=str, help="Check download against given sha256 checksum")
     parser.add_argument('--version', action='version', version=f"Tget v{TGET_VER} - A parallel download acceleration utility (Joseph King, 2024)")
     
     return parser.parse_args()
@@ -91,7 +92,7 @@ class thread_worker: #an object that knows only how to open http connection and 
 
         return response.status_code
 
-def execute_thread_workers(url, start, end, thread_id, thread_lock, file, stop_work):
+def execute_thread_workers(url, start, end, thread_id, thread_lock, file, stop_work, path):
     worker = thread_worker(url, start, end, thread_id, thread_lock, file, stop_work)
     return worker.execute()
 
@@ -102,10 +103,18 @@ def check_sha256(file, checksum: str) -> bool:
 
     return True if (file_checksum == checksum) else False
 
+class stopwatch:
+    #Honestly (probably) needless wasteful usage of OOP, but lets try seems easier to implement across various components
+    def __init__(self):
+        self.start_time = perf_counter()
+
+    def time_elapsed(self):
+        return perf_counter() - self.start_time
+    
 def main() -> int:
     args = get_args()        
     
-    start_time_main = perf_counter()
+    overall_timer = stopwatch()
 
     #These blocks should probably be functioned off since they are basically
     #   just input validation and checking the web for responses
@@ -187,9 +196,8 @@ def main() -> int:
 
             if not is_download_ok:
                 return -1
-
-            elapsed_time_main = perf_counter() - start_time_main
-            print(f"\nDownload Complete - `{args.output}` in {elapsed_time_main:.1f}s @ {int(header.headers['content-length'])/float(1024*1024*elapsed_time_main):.1f}MB/s")
+            total_time = overall_timer.time_elapsed()
+            print(f"\nDownload Complete - `{args.output}` in {total_time:.1f}s @ {int(header.headers['content-length'])/float(1024*1024*total_time):.1f}MB/s")
 
     except Exception as e:
         print(f"File Error: {e}")
