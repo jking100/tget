@@ -61,9 +61,9 @@ def validate_input(args): #checks all arguments for validity
     print(f"Checking connection to `{args.URL}`")
     header = requests.head(args.URL)
     if (header.status_code not in (200, 206)):
-        return (f"Connection Failure: {header.status_code}", True)
+        return (f"Connection Failure: {header.status_code}", True, None)
     if (not header.headers['content-length'] or not header.headers['content-type']):
-        return (f"Resource Failure: Failed to retrieve necessary file info", True)
+        return (f"Resource Failure: Failed to retrieve necessary file info", True, None)
     print(" "*2 + f"Connection ok {header.status_code}")
 
     if (int(header.headers['content-length']) < (1024**2)):
@@ -104,7 +104,7 @@ def validate_input(args): #checks all arguments for validity
         with open(args.output, 'wb') as file:
             pass
     except IOError as e:
-        return (f"Error: {str(e)[10:]}", True)
+        return (f"Error: {str(e)[10:]}", True, None)
     
     print(" "*2 + "File output okay")
 
@@ -180,8 +180,9 @@ class thread_manager:
                     ): (thread_id, start, end) 
                     for thread_id, start, end in thread_byte_index
             }            
-
+            loops = 0
             for task in concurrent.futures.as_completed(task_dict):
+                loops += 1
                 id, _, _ = task_dict[task]
                 if task.result() not in (200, 206):
                     stop_work.set()
@@ -193,6 +194,7 @@ class thread_manager:
             return -1
         
         #COMPLETE
+        print("loops:", loops)
         self.total_time_download = time.perf_counter() - start_time_download
 
         return 0
@@ -260,6 +262,12 @@ def main() -> int:
             print("Error: Failed to generate file checksum")
             print(f"Error: {e}")
     
+    start = time.perf_counter_ns()
+    size = Path(args.output).stat().st_size
+    1 if size > int(header.headers['content-length']) else 0
+    total = time.perf_counter_ns() - start
+    print(f"time to read file size and compare: {total}")
+
     return 0
 
 if __name__ == "__main__":
