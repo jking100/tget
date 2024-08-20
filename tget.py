@@ -37,7 +37,7 @@ from pathlib import Path
 import hashlib
 
 
-TGET_VER = "01" + "." + "02"
+TGET_VER = "01" + "." + "04"
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -59,7 +59,10 @@ def validate_input(args): #checks all arguments for validity
     ##################################################################
     #Check URL
     print(f"Checking connection to `{args.URL}`")
-    header = requests.head(args.URL)
+    try:
+        header = requests.head(args.URL)
+    except Exception as e:
+        return (f"Connection Failure: {e}", True, None)
     if (header.status_code not in (200, 206)):
         return (f"Connection Failure: {header.status_code}", True, None)
     if (not header.headers['content-length'] or not header.headers['content-type']):
@@ -116,13 +119,6 @@ def validate_input(args): #checks all arguments for validity
             print("WARN: Invalid checksum, disabling verification")
 
     return (f"\nInitializing download | {args.threads} threads", False, header)
-
-class stopwatch:
-    def __init__(self):
-        self.start_time = time.perf_counter()
-
-    def time_elapsed(self):
-        return time.perf_counter() - self.start_time
     
 class thread_manager:
     def __init__(self, header, file_path, url, threads):
@@ -130,19 +126,25 @@ class thread_manager:
         self.url = url
         self.threads = threads
         self.file_size = int(header.headers['content-length'])
+        self.file_path = file_path
         try:
-            self.file = open(file_path, "wb")
+            self.file = open(self.file_path, "wb")
         except Exception as e:
             print(f"Thread Manager init: {e}")
 
         self.total_time_download = 0
-        self.results = []
+        self.results = [0]
+        self.worker_log = [0 for i in range(8)]
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.file.close()
+        #print(self.worker_log)
+
+    def worker_make_report(self, worker_id, progress: float):
+        self.worker_log[worker_id] = progress
 
     def _generate_thread_byte_indexes(self, threads: int, total_size: int) -> list:
 
@@ -158,50 +160,99 @@ class thread_manager:
         thread_byte_index[-1] = (threads-1, thread_byte_index[-1][1], total_size)
         return thread_byte_index
 
-    def _execute_thread_workers(self, url, start, end, thread_id, thread_lock, file, stop_work):
-        worker = thread_worker(url, start, end, thread_id, thread_lock, file, stop_work)
+    def _progressbar(self, total, path):
+        time.sleep(.25)
+        #"[Working###########||#################||#################||#################]|/|"
+        bar = "### # ############|##################|##################|##################"
+        bar_len = len(bar)
+
+        size = Path(path).stat().st_size - (total-(total/self.threads))
+        prog = size/float(total/self.threads)
+        squig = random.choice(['⦾', '⦿', '⦻'])
+
+
+        indiv = ""
+        if sum(self.worker_log) >= self.threads:
+            #print('\033[4F')
+            for i in range(self.threads):  
+                print('\033[2F') 
+                prog = int(self.worker_log[i]*100)
+                bar = bar[0:4] + str(i) + bar[5:]
+                slice_stop = 1 + int(prog/float(100) * bar_len) 
+                write_bar = f"[{bar}][{squig}]"
+                indiv += f"{write_bar}(100%)" + ('\n' if i != self.threads-1 else '')
+
+            print(indiv, flush=True)
+        else:
+            for i in range(self.threads):   
+                print('\033[2F')
+                prog = int(self.worker_log[i]*100)
+                bar = bar[0:4] + str(i) + bar[5:]
+                slice_stop = 1 + int(prog/float(100) * bar_len) 
+                write_bar = f"[{bar[0:slice_stop]}{'-'*(bar_len-slice_stop)}][{squig}]"
+                indiv += f"{write_bar}({int(self.worker_log[i]*100)}%)" + ('\n' if i != self.threads-1 else '')
+
+            print(indiv, flush=True)
+
+    def _execute_thread_workers(self, url, start, end, thread_id, thread_lock, file, stop_work, boss):
+        worker = thread_worker(url, start, end, thread_id, thread_lock, file, stop_work, boss)
         return worker.execute()
     
     def start_download(self):
         start_time_download = time.perf_counter()
 
-        #for file writing with mutliple threads targeting same file
+        #for file writing with multiple threads targeting same file
         thread_lock = threading.Lock()
         stop_work = threading.Event()
+        boss = self
         abortFlag = False
         
         thread_byte_index = self._generate_thread_byte_indexes(self.threads, self.file_size)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.threads) as executor:
-            task_dict = { 
-                executor.submit(
-                    self._execute_thread_workers, 
-                    self.url, start, end, thread_id, thread_lock, self.file, stop_work
-                    ): (thread_id, start, end) 
-                    for thread_id, start, end in thread_byte_index
-            }            
-            loops = 0
-            for task in concurrent.futures.as_completed(task_dict):
-                loops += 1
-                id, _, _ = task_dict[task]
-                if task.result() not in (200, 206):
-                    stop_work.set()
-                    print(f"\nDownload Failed: Connection error [{task.result()}]")
-                    abortFlag = True
-                    break
+            futures = []
+            for _, (thread_id, start, end) in enumerate(thread_byte_index):
+                #print(thread_id, start, end)
+                futures.append(
+                    executor.submit(self._execute_thread_workers, 
+                                self.url,
+                                start,
+                                end,
+                                thread_id,
+                                thread_lock,
+                                self.file,
+                                stop_work,
+                                boss))
+                
+            processed = set()
+            done = set()
+            total_file_size = thread_byte_index[-1][2]
+
+            while(len(done) < self.threads):
+                done, not_done = concurrent.futures.wait(futures, 1)
+
+                for i in done.difference(processed):
+                    processed.add(i)
+                    if i.result() not in (200, 206):
+                        stop_work.set()
+                        print(f"\nDownload Failed: Connection error [{i.result()}]")
+                        abortFlag = True
+                        self.threads = -1 #negate self.threads to exit while asap
+                        break
+
+                self._progressbar(total_file_size, self.file_path)
 
         if abortFlag: # ABORT
             return -1
         
         #COMPLETE
-        print("loops:", loops)
         self.total_time_download = time.perf_counter() - start_time_download
 
         return 0
     
 class thread_worker: #an object that knows only how to open http connection and then write those bytes into a given file object, intended to be called as a subthread
     
-    def __init__(self, url: str, start: int, end: int, thread_id: int, thread_lock, file, stop_work):
+    def __init__(self, url: str, start: int, end: int, thread_id: int, thread_lock, file, stop_work, boss):
         self.url = url
         self.start = start
         self.end = end
@@ -210,6 +261,7 @@ class thread_worker: #an object that knows only how to open http connection and 
         self.file = file
         self.cursor_offset = 0
         self.stop_work = stop_work
+        self.boss = boss
 
     def execute(self) -> int:
         headers = {"Range": f"bytes={self.start}-{self.end}"}
@@ -223,10 +275,14 @@ class thread_worker: #an object that knows only how to open http connection and 
         #1mb seems to be pretty good
         for i in response.iter_content(chunk_size=1024**2, decode_unicode=False):
             if self.stop_work.is_set(): return -1
+            #time.sleep(.2) if self.thread_id != 0 else time.sleep(2)
             with self.thread_lock:
                 self.file.seek(self.start+self.cursor_offset)
                 self.file.write(i)
                 self.cursor_offset = self.file.tell()-self.start
+            ##sussyVV
+            prog = self.cursor_offset/float(self.end - self.start)
+            self.boss.worker_make_report(self.thread_id, prog)
 
         return response.status_code
 
@@ -261,12 +317,6 @@ def main() -> int:
         except Exception as e:
             print("Error: Failed to generate file checksum")
             print(f"Error: {e}")
-    
-    start = time.perf_counter_ns()
-    size = Path(args.output).stat().st_size
-    1 if size > int(header.headers['content-length']) else 0
-    total = time.perf_counter_ns() - start
-    print(f"time to read file size and compare: {total}")
 
     return 0
 
