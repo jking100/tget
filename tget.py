@@ -118,7 +118,7 @@ def validate_input(args): #checks all arguments for validity
             args.sha = "INVALID"
             print("WARN: Invalid checksum, disabling verification")
 
-    return (f"\nInitializing download | {args.threads} threads", False, header)
+    return (f"\nInitializing download | {args.threads} threads\n", False, header)
     
 class thread_manager:
     def __init__(self, header, file_path, url, threads):
@@ -133,8 +133,11 @@ class thread_manager:
             print(f"Thread Manager init: {e}")
 
         self.total_time_download = 0
+        self.file_prog = 0
+        self.prog_time_log = [0]*5
         self.results = [0]
         self.worker_log = [0 for i in range(8)]
+        self.start_time_download = 0
 
     def __enter__(self):
         return self
@@ -161,45 +164,51 @@ class thread_manager:
         return thread_byte_index
 
     def _progressbar(self, total, path):
-        time.sleep(.25)
-        #"[Working###########||#################||#################||#################]|/|"
-        bar = "### # ############|##################|##################|##################"
+        time.sleep(.1)
+        #[### 7 ############|#################|##################|#################] 100%
+        bar = "## # #############|#################|##################|#################"
         bar_len = len(bar)
 
-        size = Path(path).stat().st_size - (total-(total/self.threads))
-        prog = size/float(total/self.threads)
-        squig = random.choice(['⦾', '⦿', '⦻'])
-
+        #size = Path(path).stat().st_size - (total-(total/self.threads))
+        #prog = size/float(total/self.threads)
 
         indiv = ""
         if sum(self.worker_log) >= self.threads:
-            #print('\033[4F')
             for i in range(self.threads):  
-                print('\033[2F') 
-                prog = int(self.worker_log[i]*100)
-                bar = bar[0:4] + str(i) + bar[5:]
-                slice_stop = 1 + int(prog/float(100) * bar_len) 
-                write_bar = f"[{bar}][{squig}]"
-                indiv += f"{write_bar}(100%)" + ('\n' if i != self.threads-1 else '')
-
-            print(indiv, flush=True)
+                write_bar = f"[{bar[0:3]}{i}{bar[4:]}]"
+                indiv += f"{write_bar} 100%" + ('\n' if i != self.threads-1 else '')
+                #move_back = '\033[1F' * self.threads
+                self.file_prog = 1
         else:
             for i in range(self.threads):   
-                print('\033[2F')
+                #print('\033[2F')
                 prog = int(self.worker_log[i]*100)
-                bar = bar[0:4] + str(i) + bar[5:]
+                bar = bar[0:3] + str(i) + bar[4:]
                 slice_stop = 1 + int(prog/float(100) * bar_len) 
-                write_bar = f"[{bar[0:slice_stop]}{'-'*(bar_len-slice_stop)}][{squig}]"
-                indiv += f"{write_bar}({int(self.worker_log[i]*100)}%)" + ('\n' if i != self.threads-1 else '')
+                write_bar = f"[{bar[0:slice_stop]}{'-'*(bar_len-slice_stop)}]"
+                indiv += f"{write_bar} {int(self.worker_log[i]*100)}%" + ('\n' if i != self.threads-1 else '')
+                #move_back = '\033[1F' * self.threads
+                self.file_prog = sum(self.worker_log)/float(self.threads)
 
-            print(indiv, flush=True)
+        now = time.perf_counter() - self.start_time_download
+        est_total = now / self.file_prog
+        t_remain = (est_total) - now
+
+        curr_mbps = (self.file_prog*self.file_size)/float(1024**2)/now 
+        avg_mbps = ((sum(self.prog_time_log) / float(len(self.prog_time_log))) * .2) + (curr_mbps * .8)
+        self.prog_time_log.pop(0)
+        self.prog_time_log.append(avg_mbps)
+
+        #print(str(now - self.prog_time_log[-1][0]))
+        # [### 0 ############|##################|##################|##########--------] 100%
+        print('\033[1F' * (self.threads+1) + indiv + f"\n[{now:.0f}s elapsed] [{t_remain:.0f}s remain] [{avg_mbps:.1f} MB/s]{' '*10}", flush=True)
 
     def _execute_thread_workers(self, url, start, end, thread_id, thread_lock, file, stop_work, boss):
         worker = thread_worker(url, start, end, thread_id, thread_lock, file, stop_work, boss)
         return worker.execute()
     
     def start_download(self):
-        start_time_download = time.perf_counter()
+        self.start_time_download = time.perf_counter()
 
         #for file writing with multiple threads targeting same file
         thread_lock = threading.Lock()
@@ -246,7 +255,7 @@ class thread_manager:
             return -1
         
         #COMPLETE
-        self.total_time_download = time.perf_counter() - start_time_download
+        self.total_time_download = time.perf_counter() - self.start_time_download
 
         return 0
     
