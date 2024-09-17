@@ -10,6 +10,10 @@ firefox - 214s ( 4.7MB/s)
    tget - 102s (10.0MB/s)
 </pre>
 
+### TODO
+
+Package for distribution on PyPI
+
 ### Ez "Install" (terminal alias)
 
 Store your script in a dependable location
