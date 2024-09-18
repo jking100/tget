@@ -1,4 +1,4 @@
-## Tget - A download parallelization utility
+## tGet - A download parallelization utility
 
 Creates simultaneous connections to the resource host to accelerate download speeds 
 
@@ -7,7 +7,7 @@ Testing on a 1gb iso image:
 <pre>
 firefox - 214s ( 4.7MB/s)
    wget - 178s ( 5.7MB/s)
-   tget - 102s (10.0MB/s)
+   tGet - 102s (10.0MB/s)
 </pre>
 
 ### TODO
@@ -16,7 +16,7 @@ Package for distribution on PyPI
 
 ### Ez "Install" (terminal alias)
 
-Store your script in a dependable location
+Store your script in a dependable location \
 \>\> ~/.bashrc:
 ```
 ...
