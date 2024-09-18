@@ -36,5 +36,5 @@ alias tget='python /path/to/your/tget.py'
  ```
  > tget -h
  ```
- Tested on: Python (3.11) in a linux enivironment
+ Tested on: Python (3.11) in a linux enivironment \
  Functionality on Windows and macOS has not been tested.
