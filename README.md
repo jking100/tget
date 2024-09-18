@@ -31,7 +31,7 @@ alias tget='python /path/to/your/tget.py'
  > chmod +x ~/bin/tget
  ```
 
- After reloading the shell, tget can now be used like most command line tools
+ After reloading the shell, tget can now be used like most command line tools \
  To get started:
  ```
  > tget -h
