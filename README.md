@@ -2,7 +2,7 @@
 
 Creates simultaneous connections to the resource host to accelerate download speeds 
 
-Targeted for use on large files
+Targeted for use on large files \
 Testing on a 1gb iso image: 
 <pre>
 firefox - 214s ( 4.7MB/s)
