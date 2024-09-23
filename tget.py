@@ -191,7 +191,7 @@ class thread_manager:
                 self.file_prog = sum(self.worker_log)/float(self.threads)
 
         now = time.perf_counter() - self.start_time_download
-        est_total = now / self.file_prog
+        est_total = now / (self.file_prog + .01)
         t_remain = (est_total) - now
 
         curr_mbps = (self.file_prog*self.file_size)/float(1024**2)/now 
