@@ -312,7 +312,7 @@ def main() -> int:
         boss.start_download()
         total_time_download = boss.total_time_download
 
-    print(f"\nDownload Complete - `{args.output}` in {total_time_download:.1f}s @ {int(header.headers['content-length'])/float(1024*1024*total_time_download):.1f}MB/s")
+    print(f"\nDownload Complete - `{args.output}` in {total_time_download:.0f}s @ {int(header.headers['content-length'])/float(1024**2*total_time_download):.1f}MB/s")
 
     ########################
     if(args.sha != None):
